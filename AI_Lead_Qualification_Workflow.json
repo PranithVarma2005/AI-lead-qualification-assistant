@@ -1,0 +1,456 @@
+{
+  "name": "AI Lead Qualification Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"]
+      },
+      "id": "a1b2c3d4-0001-4a1a-9a1a-000000000001",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [-1400, 300],
+      "webhookId": "lead-qualifier-telegram-webhook",
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_credential_id",
+          "name": "Telegram Bot - Lead Qualifier"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-chat-id",
+              "name": "chatId",
+              "type": "string",
+              "value": "={{ $json.message.chat.id }}"
+            },
+            {
+              "id": "assign-user-message",
+              "name": "userMessage",
+              "type": "string",
+              "value": "={{ $json.message.text }}"
+            },
+            {
+              "id": "assign-user-name",
+              "name": "telegramUserName",
+              "type": "string",
+              "value": "={{ $json.message.from.first_name }} {{ $json.message.from.last_name }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0002-4a1a-9a1a-000000000002",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-1160, 300]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.userMessage }}",
+        "options": {
+          "systemMessage": "You are a friendly, professional AI sales assistant for our company. Your job is to qualify inbound leads through natural conversation.\n\nGoals for every conversation:\n1. Understand what the prospect needs (their business requirement / use case).\n2. Politely ask follow-up questions ONE AT A TIME until you have collected all of the following: Full Name, Contact Information (email or phone), Business Requirement, Budget range, and Timeline for starting.\n3. Never ask for more than one missing field per message. Keep messages short and conversational.\n4. Once all five fields are gathered, thank the lead and let them know the team will follow up shortly.\n5. Be warm but efficient. Do not be pushy. If the user is vague, ask a clarifying question instead of guessing.\n\nIMPORTANT: Only respond with the natural conversational reply to send to the lead. Do not include JSON or explanations in this reply — a separate process handles data extraction."
+        }
+      },
+      "id": "a1b2c3d4-0003-4a1a-9a1a-000000000003",
+      "name": "AI Sales Conversation Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [-900, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "temperature": 0.4
+        }
+      },
+      "id": "a1b2c3d4-0004-4a1a-9a1a-000000000004",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [-940, 500],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai_credential_id",
+          "name": "OpenAI - Lead Qualifier"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.chatId }}",
+        "contextWindowLength": 20
+      },
+      "id": "a1b2c3d4-0005-4a1a-9a1a-000000000005",
+      "name": "Conversation Memory (per chat)",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [-820, 500]
+    },
+    {
+      "parameters": {
+        "text": "=Conversation so far:\n{{ $('AI Sales Conversation Agent').item.json.output }}\n\nFull message history for this lead (chatId: {{ $json.chatId }}) is available in memory. Based on everything the lead has shared in this conversation, extract the following as strict JSON. Use null for any field not yet mentioned.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a data extraction engine. Read the conversation and return ONLY a JSON object matching the schema. No prose, no markdown fences."
+        }
+      },
+      "id": "a1b2c3d4-0006-4a1a-9a1a-000000000006",
+      "name": "AI Extraction Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [-620, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "temperature": 0
+        }
+      },
+      "id": "a1b2c3d4-0007-4a1a-9a1a-000000000007",
+      "name": "OpenAI Chat Model (Extraction)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [-660, 500],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai_credential_id",
+          "name": "OpenAI - Lead Qualifier"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"name\": { \"type\": [\"string\", \"null\"] },\n    \"contact\": { \"type\": [\"string\", \"null\"] },\n    \"requirement\": { \"type\": [\"string\", \"null\"] },\n    \"budget\": { \"type\": [\"string\", \"null\"] },\n    \"timeline\": { \"type\": [\"string\", \"null\"] },\n    \"isComplete\": { \"type\": \"boolean\" },\n    \"isQualified\": { \"type\": \"boolean\" },\n    \"qualificationReason\": { \"type\": \"string\" }\n  },\n  \"required\": [\"isComplete\", \"isQualified\", \"qualificationReason\"]\n}"
+      },
+      "id": "a1b2c3d4-0008-4a1a-9a1a-000000000008",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [-500, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-complete",
+              "leftValue": "={{ $json.output.isComplete }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0009-4a1a-9a1a-000000000009",
+      "name": "All Fields Collected?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-340, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Normalize Input').item.json.chatId }}",
+        "text": "={{ $('AI Sales Conversation Agent').item.json.output }}",
+        "additionalFields": {}
+      },
+      "id": "a1b2c3d4-0010-4a1a-9a1a-000000000010",
+      "name": "Send Follow-up Question (Telegram)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [-140, 460],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_credential_id",
+          "name": "Telegram Bot - Lead Qualifier"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-qualified",
+              "leftValue": "={{ $json.output.isQualified }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0011-4a1a-9a1a-000000000011",
+      "name": "Is Lead Qualified?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-140, 220]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Leads",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Name": "={{ $json.output.name }}",
+            "Contact": "={{ $json.output.contact }}",
+            "Requirement": "={{ $json.output.requirement }}",
+            "Budget": "={{ $json.output.budget }}",
+            "Timeline": "={{ $json.output.timeline }}",
+            "Qualified": "={{ $json.output.isQualified }}",
+            "Reason": "={{ $json.output.qualificationReason }}",
+            "Source": "Telegram",
+            "Date": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0012-4a1a-9a1a-000000000012",
+      "name": "Save Lead to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [80, 140],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google_sheets_credential_id",
+          "name": "Google Sheets - Lead Qualifier"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "sales-team@yourcompany.com",
+        "subject": "=🔥 New Qualified Lead: {{ $json.output.name }}",
+        "message": "=A new lead has been qualified by the AI assistant.\n\nName: {{ $json.output.name }}\nContact: {{ $json.output.contact }}\nRequirement: {{ $json.output.requirement }}\nBudget: {{ $json.output.budget }}\nTimeline: {{ $json.output.timeline }}\n\nQualification Reason: {{ $json.output.qualificationReason }}\n\nPlease follow up within 24 hours.",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0013-4a1a-9a1a-000000000013",
+      "name": "Notify Sales Team (Gmail)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [80, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "gmail_credential_id",
+          "name": "Gmail - Lead Qualifier"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Normalize Input').item.json.chatId }}",
+        "text": "=Thanks {{ $json.output.name }}! 🎉 We've got everything we need. Our team will reach out to you shortly regarding your requirement: \"{{ $json.output.requirement }}\". Have a great day!",
+        "additionalFields": {}
+      },
+      "id": "a1b2c3d4-0014-4a1a-9a1a-000000000014",
+      "name": "Send Confirmation (Telegram)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [300, 220],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_credential_id",
+          "name": "Telegram Bot - Lead Qualifier"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Normalize Input').item.json.chatId }}",
+        "text": "=Thanks for sharing your details, {{ $json.output.name }}! Based on what you've shared, our current plans may not be the perfect fit right now — but we've saved your info and someone from our team may reach out if a suitable option comes up. Have a great day!",
+        "additionalFields": {}
+      },
+      "id": "a1b2c3d4-0015-4a1a-9a1a-000000000015",
+      "name": "Send Polite Close (Telegram)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [300, 400],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_credential_id",
+          "name": "Telegram Bot - Lead Qualifier"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Leads",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Name": "={{ $json.output.name }}",
+            "Contact": "={{ $json.output.contact }}",
+            "Requirement": "={{ $json.output.requirement }}",
+            "Budget": "={{ $json.output.budget }}",
+            "Timeline": "={{ $json.output.timeline }}",
+            "Qualified": "={{ $json.output.isQualified }}",
+            "Reason": "={{ $json.output.qualificationReason }}",
+            "Source": "Telegram",
+            "Date": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0016-4a1a-9a1a-000000000016",
+      "name": "Save Unqualified Lead to Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [80, 460],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google_sheets_credential_id",
+          "name": "Google Sheets - Lead Qualifier"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          { "node": "Normalize Input", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          { "node": "AI Sales Conversation Agent", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "AI Sales Conversation Agent": {
+      "main": [
+        [
+          { "node": "AI Extraction Agent", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          { "node": "AI Sales Conversation Agent", "type": "ai_languageModel", "index": 0 }
+        ]
+      ]
+    },
+    "Conversation Memory (per chat)": {
+      "ai_memory": [
+        [
+          { "node": "AI Sales Conversation Agent", "type": "ai_memory", "index": 0 }
+        ]
+      ]
+    },
+    "AI Extraction Agent": {
+      "main": [
+        [
+          { "node": "All Fields Collected?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "OpenAI Chat Model (Extraction)": {
+      "ai_languageModel": [
+        [
+          { "node": "AI Extraction Agent", "type": "ai_languageModel", "index": 0 }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          { "node": "AI Extraction Agent", "type": "ai_outputParser", "index": 0 }
+        ]
+      ]
+    },
+    "All Fields Collected?": {
+      "main": [
+        [
+          { "node": "Is Lead Qualified?", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Send Follow-up Question (Telegram)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Is Lead Qualified?": {
+      "main": [
+        [
+          { "node": "Save Lead to Google Sheets", "type": "main", "index": 0 },
+          { "node": "Notify Sales Team (Gmail)", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Save Unqualified Lead to Sheets", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Save Lead to Google Sheets": {
+      "main": [
+        [
+          { "node": "Send Confirmation (Telegram)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Save Unqualified Lead to Sheets": {
+      "main": [
+        [
+          { "node": "Send Polite Close (Telegram)", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
