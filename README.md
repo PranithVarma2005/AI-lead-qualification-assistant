@@ -125,7 +125,7 @@ See the `screenshots/` folder for:
 
 ## Demo Video
 
-[Link to 3–5 minute demo video] — *(add your video link here, e.g. YouTube unlisted or Google Drive)*
+[Watch the demo vedio here] — *(add your video link here, e.g. YouTube unlisted or Google Drive)*
 
 ---
 
