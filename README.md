@@ -57,7 +57,7 @@ Telegram Trigger
 ## AI Model Used
 
 - **Provider:** OpenAI
-- **Model:** `gpt-4o-mini`
+- **Model:** `llama-3.3-70b-versatile`
 - **Sampling Temperature:** 0.4 (balances natural conversational tone with consistent, reliable extraction)
 - **Framework:** n8n's LangChain-based AI Agent nodes, with a Structured Output Parser to enforce consistent JSON schema for extracted lead data
 
